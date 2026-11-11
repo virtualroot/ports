@@ -28,7 +28,9 @@ jobs:
             ports=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD \
               | grep -E '^(sysutils|www)/' | cut -d/ -f1,2 | sort -u)
           else
-            ports=$(find sysutils www -mindepth 2 -maxdepth 2 -type d 2>/dev/null)
+            cats=""
+            for c in sysutils www; do [ -d "$c" ] && cats="$cats $c"; done
+            ports=$(find $cats -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
           fi
           json=$(printf '%s\n' $ports | jq -R . | jq -sc '[.[] | select(length > 0)]')
           echo "matrix=$json" >> "$GITHUB_OUTPUT"
