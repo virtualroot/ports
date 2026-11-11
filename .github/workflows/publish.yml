@@ -20,8 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # a host-runner /tmp path is a different machine's filesystem and
+      # invisible to the VM; only $GITHUB_WORKSPACE is synced in.
       - name: Fetch ports.tar.gz
-        run: curl -fsSL -o /tmp/ports.tar.gz https://cdn.openbsd.org/pub/OpenBSD/8.0/ports.tar.gz
+        run: |
+          mkdir -p .cache
+          curl -fsSL -o .cache/ports.tar.gz https://cdn.openbsd.org/pub/OpenBSD/8.0/ports.tar.gz
 
       - name: Determine ports to publish
         id: ports
@@ -43,8 +47,8 @@ jobs:
           copyback: true
           envs: "SIGNIFY_SEC"
           prepare: |
-            pkg_add -I go unzip
-            tar -C /usr -xzf /tmp/ports.tar.gz
+            pkg_add -I go unzip-6.0p18
+            tar -C /usr -xzf "$GITHUB_WORKSPACE/.cache/ports.tar.gz"
             mkdir -p /usr/ports/mystuff
             echo 'PORTSDIR_PATH=/usr/ports:/usr/ports/mystuff' >> /etc/mk.conf
             install -d -m 700 /etc/signify

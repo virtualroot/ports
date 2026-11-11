@@ -6,3 +6,5 @@ w-*/
 *.rej
 *.core
 .DS_Store
+.cache/
+dist/

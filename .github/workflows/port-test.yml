@@ -47,23 +47,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # vmactions/openbsd-vm syncs $GITHUB_WORKSPACE into the VM (and back
+      # out with copyback) but nothing outside it -- a host /tmp path is a
+      # different machine's filesystem and is invisible to the VM. Every
+      # cached/fetched artifact the VM needs to see must live under the
+      # workspace.
       - name: Cache OpenBSD ports tree
         id: ports-cache
         uses: actions/cache@v6
         with:
-          path: /tmp/ports.tar.gz
+          path: .cache/ports.tar.gz
           key: ports-8.0-${{ github.run_id }}
           restore-keys: ports-8.0-
 
       - name: Fetch ports.tar.gz if not cached
         run: |
-          [ -f /tmp/ports.tar.gz ] || \
-            curl -fsSL -o /tmp/ports.tar.gz https://cdn.openbsd.org/pub/OpenBSD/8.0/ports.tar.gz
+          mkdir -p .cache
+          [ -f .cache/ports.tar.gz ] || \
+            curl -fsSL -o .cache/ports.tar.gz https://cdn.openbsd.org/pub/OpenBSD/8.0/ports.tar.gz
 
       - name: Cache Go module distfiles
         uses: actions/cache@v6
         with:
-          path: /tmp/go_modules_cache
+          path: .cache/go_modules
           key: go-modules-${{ matrix.port }}-${{ hashFiles(format('{0}/distinfo', matrix.port)) }}
 
       - name: Build and test port in OpenBSD VM
@@ -75,13 +81,13 @@ jobs:
           sync: rsync
           copyback: true
           prepare: |
-            pkg_add -I go unzip
-            tar -C /usr -xzf /tmp/ports.tar.gz
+            pkg_add -I go unzip-6.0p18
+            tar -C /usr -xzf "$GITHUB_WORKSPACE/.cache/ports.tar.gz"
             mkdir -p /usr/ports/mystuff
             echo 'PORTSDIR_PATH=/usr/ports:/usr/ports/mystuff' >> /etc/mk.conf
             echo 'DISTDIR=/usr/ports/distfiles' >> /etc/mk.conf
-            mkdir -p /usr/ports/distfiles/go_modules
-            [ -d /tmp/go_modules_cache ] && cp -R /tmp/go_modules_cache/. /usr/ports/distfiles/go_modules/ || true
+            mkdir -p /usr/ports/distfiles/go_modules "$GITHUB_WORKSPACE/.cache/go_modules"
+            cp -R "$GITHUB_WORKSPACE/.cache/go_modules/." /usr/ports/distfiles/go_modules/ 2>/dev/null || true
           run: |
             set -e
             port="${{ matrix.port }}"
@@ -115,15 +121,8 @@ jobs:
             esac
 
             pkg_delete -q $(basename "$pkgfile" .tgz)
-            mkdir -p "$GITHUB_WORKSPACE/.go_modules_cache_out"
-            cp -R /usr/ports/distfiles/go_modules/. "$GITHUB_WORKSPACE/.go_modules_cache_out/" 2>/dev/null || true
+            cp -R /usr/ports/distfiles/go_modules/. "$GITHUB_WORKSPACE/.cache/go_modules/" 2>/dev/null || true
             cp "$pkgfile" "$GITHUB_WORKSPACE/"
-
-      - name: Relocate fetched Go module distfiles for actions/cache to pick up
-        if: always()
-        run: |
-          mkdir -p /tmp/go_modules_cache
-          cp -R .go_modules_cache_out/. /tmp/go_modules_cache/ 2>/dev/null || true
 
       - name: Upload built package
         uses: actions/upload-artifact@v7
