@@ -1,0 +1,125 @@
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ports:
+        description: "Space-separated category/port list (empty = all)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-sign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch ports.tar.gz
+        run: curl -fsSL -o /tmp/ports.tar.gz https://cdn.openbsd.org/pub/OpenBSD/8.0/ports.tar.gz
+
+      - name: Determine ports to publish
+        id: ports
+        run: |
+          if [ -n "${{ github.event.inputs.ports }}" ]; then
+            ports="${{ github.event.inputs.ports }}"
+          else
+            ports=$(find sysutils www -mindepth 2 -maxdepth 2 -type d)
+          fi
+          echo "list=$ports" >> "$GITHUB_OUTPUT"
+
+      - name: Build, sign and package in OpenBSD VM
+        uses: vmactions/openbsd-vm@v1.4.9
+        with:
+          release: "8.0"
+          mem: 8192
+          cache-after-prepare: true
+          sync: rsync
+          copyback: true
+          envs: "SIGNIFY_SEC"
+          prepare: |
+            pkg_add -I go unzip
+            tar -C /usr -xzf /tmp/ports.tar.gz
+            mkdir -p /usr/ports/mystuff
+            echo 'PORTSDIR_PATH=/usr/ports:/usr/ports/mystuff' >> /etc/mk.conf
+            install -d -m 700 /etc/signify
+            printf '%s\n' "$SIGNIFY_SEC" > /etc/signify/virtualroot-pkg.sec
+            chmod 600 /etc/signify/virtualroot-pkg.sec
+          run: |
+            set -e
+            for port in ${{ steps.ports.outputs.list }}; do
+              category="${port%%/*}"
+              name="${port##*/}"
+              mkdir -p "/usr/ports/mystuff/$category"
+              cp -R "$GITHUB_WORKSPACE/$port" "/usr/ports/mystuff/$category/$name"
+              ( cd "/usr/ports/mystuff/$port" && make package )
+            done
+
+            cd /usr/ports/packages/amd64
+            pkg_sign -s signify2 -s /etc/signify/virtualroot-pkg.sec -o signed -C -S all
+            shred -u /etc/signify/virtualroot-pkg.sec
+
+            # copyback only syncs $GITHUB_WORKSPACE, so the signed packages
+            # must land inside it before this VM step ends.
+            mkdir -p "$GITHUB_WORKSPACE/dist"
+            cp /usr/ports/packages/amd64/signed/* "$GITHUB_WORKSPACE/dist/"
+        env:
+          SIGNIFY_SEC: ${{ secrets.SIGNIFY_SEC }}
+
+      - name: Stage published tree
+        run: |
+          set -e
+          out=_site/pub/OpenBSD/8.0/packages/amd64
+          mkdir -p "$out"
+          cp dist/* "$out/"
+          cp keys/virtualroot-pkg.pub _site/
+          {
+            echo "<!doctype html><html><body>"
+            for f in "$out"/*.tgz; do
+              b=$(basename "$f")
+              echo "<a href=\"$b\">$b</a><br>"
+            done
+            echo "</body></html>"
+          } > "$out/index.html"
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: _site
+          keep_files: true
+
+  verify:
+    needs: build-and-sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Wait for GitHub Pages to publish the new packages
+        run: |
+          url="https://virtualroot.github.io/ports/pub/OpenBSD/8.0/packages/amd64/"
+          for i in $(seq 1 20); do
+            curl -fsSL "$url" | grep -q '<a href=' && exit 0
+            sleep 15
+          done
+          echo "::error::gh-pages did not publish in time"
+          exit 1
+
+      - name: Install key and pkg_add from the published repo in a fresh VM
+        uses: vmactions/openbsd-vm@v1.4.9
+        with:
+          release: "8.0"
+          prepare: |
+            mkdir -p /etc/signify
+          run: |
+            cp "$GITHUB_WORKSPACE/keys/virtualroot-pkg.pub" /etc/signify/
+            export PKG_PATH="https://virtualroot.github.io/ports/pub/OpenBSD/8.0/packages/amd64/"
+            pkg_add -v flux talosctl
+            flux --version
+            talosctl version --client

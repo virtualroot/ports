@@ -1,0 +1,17 @@
+This file's own build tag already claims OpenBSD support
+(darwin || freebsd || openbsd || netbsd || dragonfly), but
+syscall.Stat_t.Atimespec only exists on darwin/freebsd/netbsd; OpenBSD and
+dragonfly name the field Atim. One-line field rename for this build only.
+
+Index: internal/app/machined/pkg/system/services/registry/store_unix.go
+--- internal/app/machined/pkg/system/services/registry/store_unix.go.orig
++++ internal/app/machined/pkg/system/services/registry/store_unix.go
+@@ -14,7 +14,7 @@
+
+ func getATime(fi os.FileInfo) time.Time {
+ 	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+-		return time.Unix(int64(st.Atimespec.Sec), int64(st.Atimespec.Nsec))
++		return time.Unix(int64(st.Atim.Sec), int64(st.Atim.Nsec))
+ 	}
+
+ 	return fi.ModTime()

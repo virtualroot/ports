@@ -1,0 +1,4 @@
+Flux is a GitOps toolkit for Kubernetes. This package provides the flux
+command-line interface, used to bootstrap and operate a Flux-managed
+cluster: syncing sources (Git, Helm, OCI), reconciling Kustomizations and
+HelmReleases, and inspecting the state of the GitOps pipeline.

@@ -1,0 +1,15 @@
+Checksum for the github.com/virtualroot/go-ps replacement from
+patch-go_mod. See that patch for rationale.
+
+Index: go.sum
+--- go.sum.orig
++++ go.sum
+@@ -543,6 +543,8 @@
+ github.com/tidwall/sjson v1.2.5/go.mod h1:Fvgq9kS/6ociJEDnK0Fk1cpYF4FIW6ZF7LAe+6jwd28=
+ github.com/virtuald/go-ordered-json v0.0.0-20170621173500-b18e6e673d74 h1:JwtAtbp7r/7QSyGz8mKUbYJBg2+6Cd7OjM8o/GNOcVo=
+ github.com/virtuald/go-ordered-json v0.0.0-20170621173500-b18e6e673d74/go.mod h1:RmMWU37GKR2s6pgrIEB4ixgpVCt/cf7dnJv3fuH1J1c=
++github.com/virtualroot/go-ps v1.0.1 h1:4Fq6oLbF6aTFBwZc0RLfroF7ioa/3PsX2feMgNuUitM=
++github.com/virtualroot/go-ps v1.0.1/go.mod h1:BuXIKZJa+qcUI+DX1MSTlGpTA09/lfL7bd11sdL0SEk=
+ github.com/wI2L/jsondiff v0.7.1 h1:Fg9+yj+1/x3UtPBJhR91TKEzRkrEEWcAcLbg9dzEaNM=
+ github.com/wI2L/jsondiff v0.7.1/go.mod h1:yAt2W7U6Jd4HK0RA8DGSGk0zDtfEtOUUJVnH/xICpjo=
+ github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=

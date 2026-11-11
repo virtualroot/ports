@@ -1,0 +1,8 @@
+pobj/
+packages/
+plist/
+w-*/
+*.orig
+*.rej
+*.core
+.DS_Store

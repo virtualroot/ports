@@ -1,0 +1,131 @@
+name: port-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ports:
+        description: "Space-separated category/port list (empty = all)"
+        required: false
+
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: set
+        run: |
+          if [ -n "${{ github.event.inputs.ports }}" ]; then
+            ports="${{ github.event.inputs.ports }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            ports=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD \
+              | grep -E '^(sysutils|www)/' | cut -d/ -f1,2 | sort -u)
+          else
+            ports=$(find sysutils www -mindepth 2 -maxdepth 2 -type d 2>/dev/null)
+          fi
+          json=$(printf '%s\n' $ports | jq -R . | jq -sc '[.[] | select(length > 0)]')
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: changed
+    if: needs.changed.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        port: ${{ fromJson(needs.changed.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache OpenBSD ports tree
+        id: ports-cache
+        uses: actions/cache@v6
+        with:
+          path: /tmp/ports.tar.gz
+          key: ports-8.0-${{ github.run_id }}
+          restore-keys: ports-8.0-
+
+      - name: Fetch ports.tar.gz if not cached
+        run: |
+          [ -f /tmp/ports.tar.gz ] || \
+            curl -fsSL -o /tmp/ports.tar.gz https://cdn.openbsd.org/pub/OpenBSD/8.0/ports.tar.gz
+
+      - name: Cache Go module distfiles
+        uses: actions/cache@v6
+        with:
+          path: /tmp/go_modules_cache
+          key: go-modules-${{ matrix.port }}-${{ hashFiles(format('{0}/distinfo', matrix.port)) }}
+
+      - name: Build and test port in OpenBSD VM
+        uses: vmactions/openbsd-vm@v1.4.9
+        with:
+          release: "8.0"
+          mem: 8192
+          cache-after-prepare: true
+          sync: rsync
+          copyback: true
+          prepare: |
+            pkg_add -I go unzip
+            tar -C /usr -xzf /tmp/ports.tar.gz
+            mkdir -p /usr/ports/mystuff
+            echo 'PORTSDIR_PATH=/usr/ports:/usr/ports/mystuff' >> /etc/mk.conf
+            echo 'DISTDIR=/usr/ports/distfiles' >> /etc/mk.conf
+            mkdir -p /usr/ports/distfiles/go_modules
+            [ -d /tmp/go_modules_cache ] && cp -R /tmp/go_modules_cache/. /usr/ports/distfiles/go_modules/ || true
+          run: |
+            set -e
+            port="${{ matrix.port }}"
+            category="${port%%/*}"
+            name="${port##*/}"
+            mkdir -p "/usr/ports/mystuff/$category"
+            cp -R "$GITHUB_WORKSPACE/$port" "/usr/ports/mystuff/$category/$name"
+            cd "/usr/ports/mystuff/$port"
+
+            make makesum
+            cp distinfo "$GITHUB_WORKSPACE/$port/distinfo"
+            git -C "$GITHUB_WORKSPACE" diff --exit-code -- "$port/distinfo" \
+              || (echo "::error::distinfo is stale, commit the regenerated file" && exit 1)
+
+            make package
+            /usr/ports/infrastructure/bin/portcheck
+            make port-lib-depends-check
+
+            make update-plist
+            cp pkg/PLIST "$GITHUB_WORKSPACE/$port/pkg/PLIST"
+            git -C "$GITHUB_WORKSPACE" diff --exit-code -- "$port/pkg/PLIST" \
+              || (echo "::error::pkg/PLIST is stale, commit the regenerated file" && exit 1)
+
+            pkgfile=$(ls /usr/ports/packages/amd64/all/${name}-*.tgz)
+            pkg_add -D unsigned "$pkgfile"
+
+            case "$name" in
+              flux)     flux --version ;;
+              talosctl) talosctl version --client ;;
+              tinyauth) tinyauth --version ;;
+            esac
+
+            pkg_delete -q $(basename "$pkgfile" .tgz)
+            mkdir -p "$GITHUB_WORKSPACE/.go_modules_cache_out"
+            cp -R /usr/ports/distfiles/go_modules/. "$GITHUB_WORKSPACE/.go_modules_cache_out/" 2>/dev/null || true
+            cp "$pkgfile" "$GITHUB_WORKSPACE/"
+
+      - name: Relocate fetched Go module distfiles for actions/cache to pick up
+        if: always()
+        run: |
+          mkdir -p /tmp/go_modules_cache
+          cp -R .go_modules_cache_out/. /tmp/go_modules_cache/ 2>/dev/null || true
+
+      - name: Upload built package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.port }}
+          path: "**/*.tgz"
+          if-no-files-found: ignore

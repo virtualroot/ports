@@ -1,0 +1,17 @@
+go-ps has no OpenBSD implementation and the upstream repository
+(mitchellh/go-ps) is archived; the unmerged PR adding one requires cgo and
+libkvm. Replace it with a small pure-Go fork that stubs out process
+listing on OpenBSD -- the only caller reachable from flux's dependency
+graph is a cosmetic Cloud Foundry Garden container detection check
+(gonvenience/term.IsGardenContainer), never true on OpenBSD anyway.
+https://github.com/virtualroot/go-ps
+
+Index: go.mod
+--- go.mod.orig
++++ go.mod
+@@ -283,3 +283,5 @@
+ 	sigs.k8s.io/randfill v1.0.0 // indirect
+ 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
+ )
++
++replace github.com/mitchellh/go-ps => github.com/virtualroot/go-ps v1.0.1

@@ -1,0 +1,4 @@
+talosctl is the command-line client for Talos Linux, a minimal,
+immutable Linux distribution designed for running Kubernetes. It talks to
+the Talos API to manage node configuration, upgrades, cluster bootstrap,
+and diagnostics for Talos-based clusters.
