@@ -97,19 +97,22 @@ jobs:
             cp -R "$GITHUB_WORKSPACE/$port" "/usr/ports/mystuff/$category/$name"
             cd "/usr/ports/mystuff/$port"
 
+            # git isn't installed in the base VM image; compare with plain
+            # diff(1) (base system) instead, against the committed copy
+            # synced in via $GITHUB_WORKSPACE, before overwriting it.
             make makesum
-            cp distinfo "$GITHUB_WORKSPACE/$port/distinfo"
-            git -C "$GITHUB_WORKSPACE" diff --exit-code -- "$port/distinfo" \
+            diff -u "$GITHUB_WORKSPACE/$port/distinfo" distinfo \
               || (echo "::error::distinfo is stale, commit the regenerated file" && exit 1)
+            cp distinfo "$GITHUB_WORKSPACE/$port/distinfo"
 
             make package
             /usr/ports/infrastructure/bin/portcheck
             make port-lib-depends-check
 
             make update-plist
-            cp pkg/PLIST "$GITHUB_WORKSPACE/$port/pkg/PLIST"
-            git -C "$GITHUB_WORKSPACE" diff --exit-code -- "$port/pkg/PLIST" \
+            diff -u "$GITHUB_WORKSPACE/$port/pkg/PLIST" pkg/PLIST \
               || (echo "::error::pkg/PLIST is stale, commit the regenerated file" && exit 1)
+            cp pkg/PLIST "$GITHUB_WORKSPACE/$port/pkg/PLIST"
 
             pkgfile=$(ls /usr/ports/packages/amd64/all/${name}-*.tgz)
             pkg_add -D unsigned "$pkgfile"
