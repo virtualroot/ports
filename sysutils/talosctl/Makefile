@@ -21,6 +21,12 @@ MODULES =		lang/go
 
 ALL_TARGET =		${MODGO_MODNAME}/cmd/talosctl
 
+# the patch phase cd's into WRKDIST, which defaults to a directory named
+# after DISTNAME -- but for MODGO_MODNAME ports the proxy zip's actual
+# top-level directory is named ${MODGO_MODNAME}@${MODGO_VERSION} (= WRKSRC).
+# Without this, "make patch" fails with "can't cd to .../talos-v1.14.5".
+WRKDIST =		${WRKSRC}
+
 # talos's go.mod unconditionally replaces its own pkg/machinery submodule
 # with the local directory "./pkg/machinery" (they are developed in
 # lockstep in a go.work workspace upstream). That directory does not exist

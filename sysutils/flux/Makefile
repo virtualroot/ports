@@ -21,6 +21,12 @@ MODULES =		lang/go
 
 ALL_TARGET =		${MODGO_MODNAME}/cmd/flux
 
+# the patch phase cd's into WRKDIST, which defaults to a directory named
+# after DISTNAME -- but for MODGO_MODNAME ports the proxy zip's actual
+# top-level directory is named ${MODGO_MODNAME}@${MODGO_VERSION} (= WRKSRC).
+# Without this, "make patch" fails with "can't cd to .../flux2-v2.10.0".
+WRKDIST =		${WRKSRC}
+
 MODGO_LDFLAGS +=	-X main.VERSION=2.10.0
 
 # cmd/flux embeds its Kubernetes manifests from cmd/flux/manifests/*.yaml,
