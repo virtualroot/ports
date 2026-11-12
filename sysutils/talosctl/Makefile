@@ -27,6 +27,14 @@ ALL_TARGET =		${MODGO_MODNAME}/cmd/talosctl
 # Without this, "make patch" fails with "can't cd to .../talos-v1.14.5".
 WRKDIST =		${WRKSRC}
 
+# the module zip includes talos's own go.work (it lists ./pkg/machinery
+# and several ./tools/* submodules developed in lockstep upstream). Go
+# auto-activates workspace mode from any go.work file in the tree with
+# no opt-out needed, and then fails trying to load the ./tools/* modules,
+# none of which exist in this build (they're separate, unfetched, and
+# irrelevant -- they're developer tooling, not part of talosctl itself).
+MAKE_ENV +=		GOWORK=off
+
 # talos's go.mod unconditionally replaces its own pkg/machinery submodule
 # with the local directory "./pkg/machinery" (they are developed in
 # lockstep in a go.work workspace upstream). That directory does not exist
